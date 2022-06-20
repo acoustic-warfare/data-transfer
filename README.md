@@ -110,5 +110,3 @@ To install `perftest`:
     sudo make install
 
 
-
-boolshiet
