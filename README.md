@@ -9,7 +9,7 @@ A GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellan
 Clone the project:
 
 ```
-git clone https://github.com/saab_demo/data-transfer.git
+git clone https://github.com/Irreq/data-transfer.git
 ```
 
 Move to the project folder:
