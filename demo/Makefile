@@ -1,19 +1,25 @@
+CC = gcc  # C compiler
+CFLAGS = -fPIC -Wall -Wextra -O2 -g  # C flags
+LDFLAGS = -shared   # linking flags
+RM = rm -f   # rm command
+TARGET_LIB = libpyrdma.so  # target lib
+LDLIBS  := ${LDLIBS} -lrdmacm -libverbs -lpthread -lm
+
+SRCS = pyrdma.c common.c  # source files
+OBJS = $(SRCS:.c=.o)
+
+.PHONY: all
+all: ${TARGET_LIB}
+
+$(TARGET_LIB): $(OBJS)
+	$(CC) ${LDFLAGS} -o $@ $^ ${LDLIBS}
+
+$(SRCS:.c=.d):%.d:%.c
+	$(CC) $(CFLAGS) -MM $< >$@
+
+include $(SRCS:.c=.d)
+
 .PHONY: clean
-
-CFLAGS  := -Wall -Werror -g
-LD      := gcc
-LDLIBS  := ${LDLIBS} -lrdmacm -libverbs -lpthread -fPIC
-
-APPS    := pyrdma.so
-
-# gcc -shared -Wl,-soname,rdma-common -o rdma-common.so -fPIC rdma-common.c
-
-all: ${APPS}
-
-pyrdma.so: pyrdma.o
-	${LD} -shared -Wl,-soname,pyrdma -o $@ $^ ${LDLIBS}
-
-
 clean:
-	rm -f *.so ${APPS}
-	rm -f *.o ${APPS}
+	-${RM} ${TARGET_LIB} ${OBJS} $(SRCS:.c=.d)
+	

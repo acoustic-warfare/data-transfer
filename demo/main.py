@@ -20,8 +20,13 @@ try:
     GPU_MODE = True
 
 except ImportError:
-    GPU_MODE = False
-    print("`cupy` could not be found, defaulting to CPU")
+    print("`cupy` could not be found, defaulting to `pycuda`")
+    try:
+        import pycuda.driver.memcpy_peer as memcpyPeer
+    except ImportError:
+        print("`pycuda` could not be found, defaulting to CPU")
+        GPU_MODE = False
+        
 
 """
 Compile the Ctypes Common
@@ -34,7 +39,9 @@ PROJECT_PATH = os.path.expanduser("~/data-transfer/demo/")
 
 KERNEL_PATH = PROJECT_PATH + "raw_kernel.cu"
 
-C_LIB = PROJECT_PATH + 'pyrdma.so'
+C_LIB = PROJECT_PATH + 'libpyrdma.so'
+
+rdma = ctypes.CDLL(C_LIB)
 
 try:
     rdma = ctypes.CDLL(C_LIB)
