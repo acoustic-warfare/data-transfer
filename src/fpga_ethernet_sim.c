@@ -1,5 +1,5 @@
 /* fpga_ethernet_sim.c
-// File: data-transfer/demo/pyrdma.c
+// File: data-transfer/src/fpga_ethernet_sim.c
 // Author: Irreq
 
 Create a fake data transfer packet from FPGA for Data Transfer
@@ -22,26 +22,27 @@ gcc -o run fpga_ethernet_sim.c
 
 #pragma pack(1)
 
-// Version 1.0
+// Version 1.0 (BatMobile 1000)
 typedef struct payload_protocol_t {
-    int id;
-    int protocol_version;
-    int fs;
-    int fs_nr;
+    int id; // Transfer id, for tracking later
+    int protocol_version;  // To trace error
+    int fs;  // Sampling rate
+    int fs_nr;  // Sample number
     int samples;  // Every mic
     int sample_error;  // If error inside
-    int bitstream[192];
+    int bitstream[192];  // The bitstream from the mic array
 } payload_protocol;
 
 #pragma pack()
 
-
+// Sleep function for ms
 int msleep(unsigned int tms)
 {
     return usleep(tms * 1000);
 }
 
 void transmitMicArraydata(int sock, void *ctx, uint32_t ctxsize) {
+    // Print error message when writing to socket fails
     if (write(sock, ctx, ctxsize) < 0) {
         printf("Error sending message.");
         close(sock);
@@ -61,6 +62,7 @@ int main() {
 
     srand((unsigned)time(&t));
 
+    // Setup socket
     struct sockaddr_in server_address;
     memset(&server_address, 0, sizeof(server_address));
     server_address.sin_family = AF_INET;
