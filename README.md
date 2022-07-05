@@ -110,3 +110,57 @@ To install `perftest`:
     sudo make install
 
 
+## Python Demo
+
+Installation of Anaconda on Ubuntu
+
+    cd /tmp
+    wget https://repo.anaconda.com/archive/Anaconda3-5.3.1-Linux-x86_64.sh
+    bash Anaconda3-5.3.1-Linux-x86_64.sh
+
+Disable auto-init
+
+    conda config --set auto_activate_base false
+
+(Requires libnuma-dev)
+
+    conda create -n data-transfer -c conda-forge -c rapidsai cudatoolkit=11.7 ucx-proc=*=gpu ucx ucx-py python=3.7
+
+    conda create -n data-transfer -c conda-forge automake make libtool pkg-config psutil "python=3.7" setuptools "cython>=0.29.14,<3.0.0a0"
+
+    conda install -n data-transfer -c rapidsai -c nvidia -c conda-forge pytest pytest-asyncio "numba>=0.46" rmm distributed
+
+    conda activate data-transfer
+
+    pip install cupy-cuda110 cpython
+
+    ../contrib/configure-release \
+    --enable-mt \
+    --prefix="$CONDA_PREFIX" \
+    --with-cuda="$CUDA_HOME" \
+    --enable-mt \
+    --with-rdmacm \
+    --with-verbs \
+    CPPFLAGS="-I$CUDA_HOME/include"
+
+
+
+ucx libs installed in:
+
+~/anaconda3/envs/ucx-pycu/lib/ucx
+
+
+    conda create -n gpu-rdma -c conda-forge -c rapidsai python=3.7 ipython ucx-proc=*=gpu ucx ucx-py dask distributed numpy cupy -y
+    conda activate gpu-rdma 
+    pip install pynvml
+
+## Usage
+
+To build the project:
+
+    cd src
+    make
+
+To run the demo:
+
+    python3 main.py
