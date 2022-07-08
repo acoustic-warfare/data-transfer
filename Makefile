@@ -3,7 +3,7 @@ CYFLAGS = --embed
 PYTHON_VERSION = 3.7
 
 CC = gcc
-CFLAGS = -Wall -Werror -Os
+CFLAGS = -v -Wall -Werror -Os
 
 PYMODULE = ~/miniconda3/envs/gpu-rdma/include/python$(PYTHON_VERSION)m/
 PYLIB = ~/miniconda3/envs/gpu-rdma/lib
@@ -15,15 +15,15 @@ BIN = run
 
 .PHONY: all
 
-all: main
+all: main fpga
 
 main:
-	mkdir build
 	$(CYC) $(CYFLAGS) -o build/$(OUT) src/main.pyx
-	$(CC) $(CFALGS) -I $(PYMODULE) -o $(BIN) build/$(OUT) -L $(PYLIB) $(LIBS)
+	$(CC) $(CFLAGS) -I $(PYMODULE) -o $(BIN) build/$(OUT) -L $(PYLIB) $(LIBS)
+fpga:
+	$(CC) $(CFLAGS) -o fpga_emulator src/fpga_mic_em.c
 
 .PHONY: clean
 clean:
-	$(RM) build/$(OUT) $(BIN)
-	rmdir build
+	$(RM) build/$(OUT) $(BIN) fpga_emulator
 

@@ -1,10 +1,10 @@
-/* fpga_ethernet_sim.c
-// File: data-transfer/src/fpga_ethernet_sim.c
+/* fpga_mic_em.c
+// File: data-transfer/src/fpga_mic_em.c
 // Author: Irreq
 
 Create a fake data transfer packet from FPGA for Data Transfer
 
-gcc -o run fpga_ethernet_sim.c
+gcc -o run fpga_mic_em.c
 
 */
 
@@ -54,10 +54,10 @@ void transmitMicArraydata(int sock, void *ctx, uint32_t ctxsize) {
 int main() {
     const int PORT = TCP_PORT;
     const char *ADDRESS = TCP_ADDRESS;
-    int BUFFSIZE = sizeof(payload_protocol);
-    char buff[BUFFSIZE];
+    // int BUFFSIZE = sizeof(payload_protocol);
+    // char buff[BUFFSIZE];
     int sock;
-    int nread;
+    // int nread;
     time_t t;
 
     srand((unsigned)time(&t));
@@ -77,7 +77,7 @@ int main() {
 
     if (connect(sock, (struct sockaddr *)&server_address, sizeof(server_address)) < 0)
     {
-        printf("ERROR: Unable to connect to server\n");
+        printf("ERROR: Unable to connect to server\nHINT: Is the server running?\n");
         return 1;
     }
 
