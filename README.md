@@ -1,7 +1,8 @@
 # data-transfer
 
-A GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's
+A COTS (comm) GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's
 
+## Why? [![startss with why](https://img.shields.io/badge/start%20with-why%3F-brightgreen.svg?style=flat)](http://www.ted.com/talks/simon_sinek_how_great_leaders_inspire_action)
 
 
 ## Installation
@@ -36,18 +37,23 @@ cd data-transfer
 Nvidia:
 * Tesla™ (any)
 * Quadro™ K-Series
-* Quadro™ P-Series
+* Quadro™ P-Series (Ours)
 
 
 ### Software
 
-* **NIC** In order to use the network interface cards, the package NVIDIA Firmware Tools: `mft` must be installed for firmware management together with correct drivers for Linux `MLNX_OFED`.
+* **NIC**
+In order to use the network interface cards, the package NVIDIA Firmware Tools: `mft` must be installed for firmware management together with correct drivers for Linux `MLNX_OFED`.
 
 * **GPU**
 In order to utilize GPUDirect RDMA, the package `nvidia-peer-mem` must be installed.
 MLNX_OFED 5.1
 
-1) `nvidia-peer-mem` GPUDirect RDMA
+* **Data Transfer**
+To be able to control the host channel adapter (HCA), the HPC networking library `ucx` is required with support for GPUDirect RDMA.
+
+
+
 
 ## Installation
 
@@ -99,68 +105,202 @@ To install `nvidia-peer-mem` on Ubuntu 20.04:
 
     sudo service nv_peer_mem restart
 
+**3.1 Performance Benchmark (OPTIONAL)**
 
-To install `perftest`:
-
-    sudo apt install libpci-dev libibumad
+    sudo apt update -y
+    sudo apt install -y libpci-dev libibumad
 
     git clone https://github.com/linux-rdma/perftest.git
     cd perftest
     ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h && make -j
     sudo make install
 
+**4. UCX**
 
-## Python Demo
+To install `ucx` on Ubuntu 20.04, python bindings are required together with python3+ packages. To maintain a working environment, installing conda is highly recomended. 
 
-Installation of Anaconda on Ubuntu
+**4.1 Conda**
 
-    cd /tmp
-    wget https://repo.anaconda.com/archive/Anaconda3-5.3.1-Linux-x86_64.sh
-    bash Anaconda3-5.3.1-Linux-x86_64.sh
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86.sh
+
+    bash Miniconda3-latest-Linux-x86.sh
 
 Disable auto-init
 
     conda config --set auto_activate_base false
 
-(Requires libnuma-dev)
+Recreate an environment inside data-transfer
 
-    conda create -n data-transfer -c conda-forge -c rapidsai cudatoolkit=11.7 ucx-proc=*=gpu ucx ucx-py python=3.7
+    conda env create -f environment.yml
 
-    conda create -n data-transfer -c conda-forge automake make libtool pkg-config psutil "python=3.7" setuptools "cython>=0.29.14,<3.0.0a0"
-
-    conda install -n data-transfer -c rapidsai -c nvidia -c conda-forge pytest pytest-asyncio "numba>=0.46" rmm distributed
+Activate and enter the newly created environment
 
     conda activate data-transfer
+    ...
+    (data-transfer) $ 
 
-    pip install cupy-cuda110 cpython
+**4.2 Development packages for the program**
 
-    ../contrib/configure-release \
-    --enable-mt \
-    --prefix="$CONDA_PREFIX" \
-    --with-cuda="$CUDA_HOME" \
-    --enable-mt \
-    --with-rdmacm \
-    --with-verbs \
-    CPPFLAGS="-I$CUDA_HOME/include"
+Ensure that the latest updates are installed.
+
+    sudo apt update -y
+
+Install development packages in Ubuntu 20.04. `libnuma-dev`, `cython3`.
+
+    sudo apt install -y libnuma-dev cython3
+
+**4.3 Install dependencies**
+
+Some python modules require more dependencies to run.
+
+    pip install pynvml cpython
+
+To build the project requires having the `gcc` compiler.
+
+    sudo apt install gcc cmake
 
 
+## Setup
 
-ucx libs installed in:
+The adapters need assigned IP addresses, we used the GNOME Network Manager GUI and assigned the IPv4 addresses `10.0.0.x` format with netmask `255.255.255.0`
 
-~/anaconda3/envs/ucx-pycu/lib/ucx
+To run the demo, make sure both network adapters are connected and working properly by performing a ping. It is important to specify the correct interface when pinging:
+
+    ping -I <LOCAL_INTERFACE> <REMOTE_ADDRESS>
+
+Eg:
+
+    (data-transfer) scarecrow@node1:~/data-transfer$ ping -I ens4f0np0 10.0.0.4
+    PING 10.0.0.4 (10.0.0.4) from 10.0.0.3 ens4f0np0: 56(84) bytes of data.
+    64 bytes from 10.0.0.4: icmp_seq=1 ttl=64 time=0.110 ms
+    64 bytes from 10.0.0.4: icmp_seq=2 ttl=64 time=0.112 ms
+    64 bytes from 10.0.0.4: icmp_seq=3 ttl=64 time=0.109 ms
+    ^C
+    --- 10.0.0.4 ping statistics ---
+    3 packets transmitted, 3 received, 0% packet loss, time 2029ms
+    rtt min/avg/max/mdev = 0.109/0.110/0.112/0.001 ms
+
+To find out which interface to use:
+```bash
+(data-transfer) scarecrow@node1:~/data-transfer$ ifconfig
+
+    eno1: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether 54:bf:64:6a:91:31  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device interrupt 16  memory 0x92f00000-92f20000  
+
+    # The one we used: Mellanox ConnectX-6 Dx (first port)
+    -----------------
+ -> ens4f0np0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet 10.0.0.3  netmask 255.255.255.0  broadcast 10.0.0.255
+            inet6 fe80::4e4d:abee:c38d:4b6f  prefixlen 64  scopeid 0x20<link>
+            ether 10:70:fd:60:c1:cc  txqueuelen 1000  (Ethernet)
+            RX packets 1021  bytes 63776 (63.7 KB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 841  bytes 52495 (52.4 KB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+    -----------------
+
+    ens4f1np1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet 10.0.0.1  netmask 255.255.255.0  broadcast 10.0.0.255
+            inet6 fe80::40ba:65b6:cb4e:4521  prefixlen 64  scopeid 0x20<link>
+            ether 10:70:fd:60:c1:cd  txqueuelen 1000  (Ethernet)
+            RX packets 36  bytes 4419 (4.4 KB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 23  bytes 3072 (3.0 KB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+    lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+            inet 127.0.0.1  netmask 255.0.0.0
+            inet6 ::1  prefixlen 128  scopeid 0x10<host>
+            loop  txqueuelen 1000  (Local Loopback)
+            RX packets 1782  bytes 168796 (168.7 KB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 1782  bytes 168796 (168.7 KB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+    wlx04421a4d9e71: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet 81.236.101.159  netmask 255.255.254.0  broadcast 81.236.101.255
+            inet6 fe80::7207:baa6:6cea:6bd3  prefixlen 64  scopeid 0x20<link>
+            ether 04:42:1a:4d:9e:71  txqueuelen 1000  (Ethernet)
+            RX packets 66840  bytes 48821412 (48.8 MB)
+            RX errors 0  dropped 7  overruns 0  frame 0
+            TX packets 61150  bytes 44974817 (44.9 MB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+```
+
+If the connection is working building can be started
 
 
-    conda create -n gpu-rdma -c conda-forge -c rapidsai python=3.7 ipython ucx-proc=*=gpu ucx ucx-py dask distributed numpy cupy -y
-    conda activate gpu-rdma 
-    pip install pynvml
+## Building
 
-## Usage
+Building the demo will create two file: `run` and `fpga_emulator`. `run` is the main demo executable and is the main program. `fpga_emulator` is a program to emulate incoming datastream (data generator) to send from one GPU to the other.
 
-To build the project:
-
-    cd src
     make
 
-To run the demo:
+To only build `fpga_emulator`:
 
-    python3 main.py
+    make fpga
+
+To cleanup and removal of executables:
+
+    make clean
+
+ 
+## Usage
+
+Running the demo requires that both computers are connected via infiniband and correct software and modules are installed and running. 
+
+### Receiver
+Start the receiving end (Will receive a continuous flow of data)
+
+    ./run --server -a <ADDRESS> -p <PORT>
+
+### Transmitter (Requires a running receiver)
+Start the receiving end (Will receive a continuous flow of data)
+
+    ./run --client -a <SERVER_ADDRESS> -p <PORT>
+
+### Data Generation (Requires a running transmitter)
+Start the FPGA device sending data to a UDP socket or run the the emulator:
+
+    ./fpga_emulator -a "localhost" -p <PORT>
+
+
+
+## Problems
+
+### Network Cards Shutting Down
+
+If the network adapters stops working after a period of time can be a result of insufficient cooling. The ConnectX cards require continuous cooling, we found that after exceeding 110°C, the modules were being unloaded from the system `mlx5_core` followed by many warnings when shown with `dmesg`. After exceeding the 120°C mark, the cards were physically shutdown by an onboard safety mechanism resulting in reloading the kernel modules was impossible and required a complete restart of the system.
+
+From Nvidia https://docs.nvidia.com/networking/display/ConnectX5EN/Thermal+Sensors
+
+    The adapter card incorporates the ConnectX IC which operates in the range of temperatures between 0C and 105C.
+
+    There are three thermal threshold definitions which impact the overall system operation state:
+
+        Warning – 105°C: On managed systems only: When the device crosses the 100°C threshold, a Warning Threshold message will be issued by the management SW, indicating to system administration that the card has crossed the Warning threshold. Note that this temperature threshold does not require nor lead to any action by hardware (such as adapter card shutdown).
+
+        Critical – 115°C: When the device crosses this temperature, the firmware will automatically shut down the device.
+        
+        Emergency – 130°C: In case the firmware fails to shut down the device upon crossing the Critical threshold, the device will auto-shutdown upon crossing the Emergency (130°C) threshold.
+
+    The card's thermal sensors can be read through the system’s SMBus. The user can read these thermal sensors and adapt the system airflow in accordance with the readouts and the needs of the above-mentioned IC thermal requirements.
+
+To check temperature of the cards install the
+
+To find the cards:
+
+    (data-transfer) scarecrow@node1:~/data-transfer$ lspci | grep Mellanox
+    04:00.0 Ethernet controller: Mellanox Technologies MT2892 Family [ConnectX-6 Dx]
+    04:00.1 Ethernet controller: Mellanox Technologies MT2892 Family [ConnectX-6 Dx]
+
+To probe `04:00.0` (requires root privileges):
+
+    sudo mget_temp -d 04:00.0
+    53
+
