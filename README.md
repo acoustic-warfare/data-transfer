@@ -1,6 +1,6 @@
 # data-transfer
 
-A COTS (comm) GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's
+A COTS GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's
 
 
 ## Installation
@@ -103,7 +103,17 @@ To install `nvidia-peer-mem` on Ubuntu 20.04:
 
     sudo service nv_peer_mem restart
 
-**3.1 Performance Benchmark (OPTIONAL)**
+**3.1 GDRCopy (OPTIONAL)**
+
+To install `gdrcopy`
+
+    git clone https://github.com/NVIDIA/gdrcopy.git
+    cd gdrcopy
+    sudo apt install check libsubunit0 libsubunit-dev
+    mkdir final
+    make prefix=final CUDA="$CUDA_HOME" all install
+
+**3.2 Performance Benchmark (OPTIONAL)**
 
     sudo apt update -y
     sudo apt install -y libpci-dev libibumad
@@ -301,4 +311,15 @@ To probe `04:00.0` (requires root privileges):
 
     sudo mget_temp -d 04:00.0
     53
+
+### libpython3.7m.so.1.0 not found
+
+If during runtime, the linker cannot find `libpython3.7m.so.1.0` like this:
+
+    error while loading shared libraries: libpython3.7m.so.1.0: cannot open shared object file: No such file or directory
+
+A temporal solution is to export the path to the module using
+
+    export LD_LIBRARY_PATH=~/miniconda3/envs/data-transfer/lib/
+LD_LIBRARY_PATH=~/miniconda3/envs/gpu-rdma/lib/
 
