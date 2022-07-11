@@ -1,3 +1,4 @@
+# cython: language_level=3
 # File: data-transfer/src/main.pyx
 # Author: Irreq
 # Date: 05/07-2022
@@ -44,15 +45,23 @@ top -d 0.2 -i
 watch -n 0.2 nvidia-smi
 """
 
-ucp_setup_options = dict(TLS="ib,cma,cuda_copy,cuda,cuda_ipc")
-ucp.init(ucp_setup_options)
-
-# Only use the first GPU
-cp.cuda.runtime.setDevice(0)
-
 # Config
 cdef int port = 12000
 cdef unsigned long int n_bytes = 2**30
+
+cdef load_init(args):
+    """Namespace args"""
+
+    # Only use the first GPU
+    cp.cuda.runtime.setDevice(args.device)
+
+    ucp_setup_options = dict(TLS=args.methods)
+    try: 
+        ucp.init(ucp_setup_options)
+    except RuntimeError:  # Already initiated
+        ucp.reset()
+        ucp.init(ucp_setup_options)
+
 
 
 ## External C code
@@ -138,13 +147,15 @@ cdef class DataTransfer:
     # Define variables to be accessed by function outside DataTransfer class
     cdef unsigned long int _n_bytes  # Up to 1GB
     cdef str _address  # host address
+    cdef unsigned long int _msg_size  # Up to 115MB
 
     cdef public int running  # Signal interupt
     cdef public _receive_q  # Internal queue
 
-    def __init__(self, unsigned long int n_bytes, str address = "localhost"):
+    def __init__(self, unsigned long int n_bytes, str address = ucp.get_address(), unsigned long int msg_size=1000):
         self._n_bytes = n_bytes
         self._address = address
+        self._msg_size = msg_size
 
         self._receive_q = queue.Queue()
 
@@ -200,11 +211,52 @@ cdef class DataTransfer:
             time.sleep(1)
             printf("Hello World!\n")
 
-
+def parse_args():
+    import argparse
+    parser = argparse.ArgumentParser(description="COTS Data Transfer")
+    parser.add_argument(
+        "--client",
+        default=False,
+        action="store_true",
+        help="IP address to connect to server.",
+    )
+    parser.add_argument(
+        "--msg-size",
+        default=2**26,
+        type=int,
+        help="Message size in bytes",
+    )
+    parser.add_argument(
+        "-a", "--address",
+        default=ucp.get_address(),
+        type=str,
+        help="IP address to connect to server.",
+    )
+    parser.add_argument(
+        "-d", "--device",
+        default=0,
+        type=int,
+        help="GPU Index to use.",
+    )
+    parser.add_argument(
+        "-m", "--methods",
+        default="ib,cma,cuda_copy,cuda,cuda_ipc,gdr_copy",
+        type=str,
+        help="UCX Tx/Rx methods.",
+    )
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    # print(sys.argv)
+    args = parse_args()
 
-    dt = DataTransfer(10000, address="10.0.0.4")
-    dt.test()
-    # dt.main()
+    load_init(args)
+
+    dt = DataTransfer(10000, msg_size=args.msg_size)
+
+    if args.client:
+        print("Client")
+        #dt.test()
+
+    else:
+        print("Server")
+        #dt.test()
