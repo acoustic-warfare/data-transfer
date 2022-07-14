@@ -1,12 +1,14 @@
 CYC = cython
+# ENV = data-transfer
+ENV = gpu-rdma
 CYFLAGS = --embed
 PYTHON_VERSION = 3.7
 
 CC = gcc
 CFLAGS = -v -Wall -Werror -Os
 
-PYMODULE = ~/miniconda3/envs/gpu-rdma/include/python$(PYTHON_VERSION)m/
-PYLIB = ~/miniconda3/envs/gpu-rdma/lib
+PYMODULE = ~/miniconda3/envs/$(ENV)/include/python$(PYTHON_VERSION)m/
+PYLIB = ~/miniconda3/envs/$(ENV)/lib
 LIBS = -lm -lpython$(PYTHON_VERSION)m
 
 RM = rm
