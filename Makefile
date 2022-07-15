@@ -22,9 +22,9 @@ LIB = lib
 
 .PHONY: all
 
-all: main fpga lib
+all: main fpga
 
-main:
+main: lib
 	$(CYC) $(CYFLAGS) -o $(OUT)/main.c src/main.pyx
 	$(CC) $(CFLAGS) -I $(PYMODULE) -o $(BIN) $(OUT)/main.c -L $(PYLIB) $(LIBS)
 fpga:
