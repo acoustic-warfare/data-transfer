@@ -73,6 +73,21 @@ cdef load_init(args):
 
 # from src import transmitter
 
+# cdef extern from "../lib/cubridge.so":
+#     void say_hello(int k)
+# 
+# say_hello(5)
+
+import ctypes
+cubridge_lib = ctypes.cdll.LoadLibrary(
+            "lib/cubridge.so")
+
+# bridge_fcn = cubridge_lib.pythonCudaBridgeWrapper
+bridge_fcn = cubridge_lib.say_hello
+bridge_fcn.argtypes = [ctypes.c_int]
+
+bridge_fcn(3)
+
 
 class read_from_q:
     def __init__(self, q, block=False, timeout=None):

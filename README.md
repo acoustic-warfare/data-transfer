@@ -1,6 +1,6 @@
 # data-transfer
 
-A COTS GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's
+A COTS GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's over UCX.
 
 
 ## Installation
@@ -8,7 +8,7 @@ A COTS GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using M
 Clone the project:
 
 ```
-git clone https://github.com/Irreq/data-transfer.git
+git clone https://github.com/acoustic-warfare/data-transfer.git
 ```
 
 Move to the project folder:
@@ -245,13 +245,17 @@ If the connection is working building can be started
 
 ## Building
 
-Building the demo will create two file: `run` and `fpga_emulator`. `run` is the main demo executable and is the main program. `fpga_emulator` is a program to emulate incoming datastream (data generator) to send from one GPU to the other.
+Building the demo will create three executable files: `run`, `web_gauge` and `fpga_emulator`. `run` is the main data-transfer program. `fpga_emulator` is a program to emulate incoming datastream (data generator) to send from one GPU to the other. `web_gauge` is a web GUI showing a speedometer of the current transfer rate.
 
     make
 
 To only build `fpga_emulator`:
 
     make fpga
+
+To only build `web_gauge`:
+
+    make web_gauge
 
 To cleanup and removal of executables:
 
@@ -261,6 +265,8 @@ To cleanup and removal of executables:
 ## Usage
 
 Running the demo requires that both computers are connected via infiniband and correct software and modules are installed and running. 
+
+
 
 ### Receiver
 Start the receiving end (Will receive a continuous flow of data)
@@ -276,6 +282,17 @@ Start the receiving end (Will receive a continuous flow of data)
 Start the FPGA device sending data to a UDP socket or run the the emulator:
 
     ./fpga_emulator -a "localhost" -p <PORT>
+
+### Live Online Demo (Requires a running data-transfer)
+Start the data-transfer demo:
+
+    ./web_gauge --web-host <IP> -w <PORT> -a "localhost" -p 30000
+
+View the running application running on specified `IP` and `PORT`:
+
+    firefox http://IP:PORT/
+
+
 
 
 
@@ -321,5 +338,4 @@ If during runtime, the linker cannot find `libpython3.7m.so.1.0` like this:
 A temporal solution is to export the path to the module using
 
     export LD_LIBRARY_PATH=~/miniconda3/envs/data-transfer/lib/
-LD_LIBRARY_PATH=~/miniconda3/envs/gpu-rdma/lib/
 
