@@ -22,13 +22,17 @@ LIB = lib
 
 .PHONY: all
 
-all: main fpga
+all: main fpga web_gauge
 
 main: lib
 	$(CYC) $(CYFLAGS) -o $(OUT)/main.c src/main.pyx
 	$(CC) $(CFLAGS) -I $(PYMODULE) -o $(BIN) $(OUT)/main.c -L $(PYLIB) $(LIBS)
 fpga:
 	$(CC) $(CFLAGS) -o fpga_emulator src/fpga_mic_em.c
+
+web_gauge:
+	$(CYC) $(CYFLAGS) -o $(OUT)/web_live_gauge.c src/web_live_gauge.pyx
+	$(CC) $(CFLAGS) -I $(PYMODULE) -o web_gauge $(OUT)/web_live_gauge.c -L $(PYLIB) $(LIBS)
 
 # Cuda Cython Bridge
 bridge.o:
@@ -47,5 +51,5 @@ lib: cubridge.so
 
 .PHONY: clean
 clean:
-	$(RM) $(LIB)/*.so $(OUT)/*.o $(OUT)/main.c $(BIN) fpga_emulator
+	$(RM) $(LIB)/*.so $(OUT)/*.o $(OUT)/main.c $(BIN) fpga_emulator web_gauge
 

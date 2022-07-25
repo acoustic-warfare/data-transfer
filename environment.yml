@@ -2,6 +2,7 @@ name: data-transfer
 channels:
   - rapidsai
   - conda-forge
+  - plotly
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=conda_forge
@@ -16,6 +17,9 @@ dependencies:
   - cudatoolkit=11.7.0=hd8887f6_10
   - cupy=10.5.0=py37h17e6d27_0
   - cytoolz=0.11.2=py37h540881e_2
+  - dash=2.6.0=pyhd8ed1ab_0
+  - dash-core-components=2.0.0=pyhd8ed1ab_0
+  - dash-html-components=2.0.0=pyhd8ed1ab_0
   - dask=2022.2.0=pyhd8ed1ab_0
   - dask-core=2022.2.0=pyhd8ed1ab_0
   - decorator=5.1.1=pyhd8ed1ab_0
@@ -72,6 +76,7 @@ dependencies:
   - pickleshare=0.7.5=py_1003
   - pillow=9.1.1=py37h44f0d7a_1
   - pip=22.1.2=pyhd8ed1ab_0
+  - plotly=5.9.0=pyhd8ed1ab_0
   - prompt-toolkit=3.0.30=pyha770c72_0
   - psutil=5.9.1=py37h540881e_0
   - pthread-stubs=0.4=h36c2ea0_1001
