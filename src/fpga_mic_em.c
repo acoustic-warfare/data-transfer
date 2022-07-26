@@ -17,7 +17,7 @@ gcc -o run fpga_mic_em.c
 #include <stdlib.h>
 #include <string.h>
 
-#define TCP_PORT 45405
+#define TCP_PORT 45005
 #define TCP_ADDRESS "localhost"
 
 #pragma pack(1)

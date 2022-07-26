@@ -23,12 +23,18 @@ LIB = lib
 .PHONY: all
 
 all: main fpga web_gauge
+# all: main
 
 main: lib
 	$(CYC) $(CYFLAGS) -o $(OUT)/main.c src/main.pyx
 	$(CC) $(CFLAGS) -I $(PYMODULE) -o $(BIN) $(OUT)/main.c -L $(PYLIB) $(LIBS)
 fpga:
 	$(CC) $(CFLAGS) -o fpga_emulator src/fpga_mic_em.c
+
+test:
+	$(CYC) $(CYFLAGS) -o $(OUT)/test.c src/transfer_real.pyx
+	$(CC) $(CFLAGS) -I $(PYMODULE) -o test $(OUT)/test.c -L $(PYLIB) $(LIBS)
+
 
 web_gauge:
 	$(CYC) $(CYFLAGS) -o $(OUT)/web_live_gauge.c src/web_live_gauge.pyx
