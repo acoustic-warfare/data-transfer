@@ -246,7 +246,15 @@ If the connection is working building can be started
 
 ## Building
 
-Building the demo will create three executable files: `run`, `web_gauge` and `fpga_emulator`. `run` is the main data-transfer program. `fpga_emulator` is a program to emulate incoming datastream (data generator) to send from one GPU to the other. `web_gauge` is a web GUI showing a speedometer of the current transfer rate.
+Building the demo will create five executable files: `run`, `web_gauge`, `fpga_emulator`, `transfer_real` and `transfer_synthetic`. 
+
+- `run` is the main data-transfer program. 
+- `fpga_emulator` is a program to emulate incoming datastream (data generator) to send from one GPU to the other.
+- `web_gauge` is a web GUI showing a speedometer of the current transfer rate.
+- `transfer_real` is a demo utilizing incoming data from a socket, eg. `fpga_emulator` and displays the bandwidth to `web_gauge`.
+- `transfer_synthetic` showcase the maximum internal transferspeed within a program, ie. the program creates an array of ones, default is `2^26` bytes and writes to a remote region as fast as possible. The program `web_gauge` is also used to display the results.
+
+To build all programs:
 
     make
 
@@ -297,7 +305,7 @@ View the running application running on specified `IP` and `PORT`:
 
 
 
-## Problems
+## Problems and Known Issues
 
 ### Network Cards Shutting Down
 
@@ -321,7 +329,7 @@ To check temperature of the cards install the
 
 To find the cards:
 
-    (data-transfer) scarecrow@node1:~/data-transfer$ lspci | grep Mellanox
+    (data-transfer) scarecrow@scarecrow:~/data-transfer$ lspci | grep Mellanox
     04:00.0 Ethernet controller: Mellanox Technologies MT2892 Family [ConnectX-6 Dx]
     04:00.1 Ethernet controller: Mellanox Technologies MT2892 Family [ConnectX-6 Dx]
 
@@ -330,13 +338,93 @@ To probe `04:00.0` (requires root privileges):
     sudo mget_temp -d 04:00.0
     53
 
+## Runtime Errors and Solutions
+
+### Aborted (core dumped) & UCX  ERROR failed to register address
+
+If during runtime the following error occurs a solution is to use smaller buffers. We are not entirely sure how this issue is emerging. We found that a buffer size greater than `>115MB` would result in the following errors:
+
+    (data-transfer) scarecrow@scarecrow:~/data-transfer$ ./transfer_synthetic --transmitter -p 12377 -sp 45004 -a 10.0.0.4  --n-bytes 1000000000
+    [1658921155.651848] [scarecrow:15571:0]          ib_log.c:254  UCX  ERROR ibv_reg_mr(address=0x7fe574000000, length=1000000000, access=0xf) failed: Bad address
+    [1658921155.651869] [scarecrow:15571:0]          ucp_mm.c:159  UCX  ERROR failed to register address 0x7fe574000000 mem_type bit 0x2 length 1000000000 on md[3]=mlx5_0: Input/output error (md reg_mem_types 0x3)
+    [1658921155.651874] [scarecrow:15571:0]     ucp_request.c:519  UCX  ERROR failed to register user buffer datatype 0x8 address 0x7fe574000000 len 1000000000: Input/output error
+    [scarecrow:15571:0:15571]        rndv.c:2378 Assertion `status == UCS_OK' failed
+    ==== backtrace (tid:  15571) ====
+    0  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../libucs.so.0(ucs_handle_error+0x2dc) [0x7fe71a27d7cc]
+    1  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../libucs.so.0(ucs_fatal_error_message+0xb8) [0x7fe71a27a708]
+    2  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../libucs.so.0(ucs_fatal_error_format+0x114) [0x7fe71a27a824]
+    3  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../libucp.so.0(ucp_rndv_rtr_handler+0x608) [0x7fe71a331298]
+    4  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../ucx/libuct_ib.so.0(+0x3eecd) [0x7fe6ef785ecd]
+    5  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../libucp.so.0(ucp_worker_progress+0x6a) [0x7fe71a2fecca]
+    6  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/ucx_api.cpython-37m-x86_64-linux-gnu.so(+0x290ba) [0x7fe71a3b70ba]
+    7  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyMethodDef_RawFastCallDict+0x9c) [0x7fe71ea68d7c]
+    8  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x1ed8ad) [0x7fe71ea698ad]
+    9  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(PyObject_Call+0x64) [0x7fe71ea69c04]
+    10  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x434a) [0x7fe71e8e4aea]
+    11  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalCodeWithName+0x920) [0x7fe71e99de80]
+    12  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyFunction_FastCallKeywords+0x8a) [0x7fe71ea690ea]
+    13  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x64416) [0x7fe71e8e0416]
+    14  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x47a6) [0x7fe71e8e4f46]
+    15  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x6ddea) [0x7fe71e8e9dea]
+    16  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyFunction_FastCallDict+0x2e3) [0x7fe71ea694f3]
+    17  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyObject_Call_Prepend+0xf7) [0x7fe71ea6bc17]
+    18  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyObject_FastCallKeywords+0xd9) [0x7fe71ea69dd9]
+    19  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0xf409b) [0x7fe71e97009b]
+    20  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyMethodDef_RawFastCallDict+0xf1) [0x7fe71ea68dd1]
+    21  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyCFunction_FastCallDict+0x29) [0x7fe71ea699d9]
+    22  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x7e51) [0x7fe71e8e85f1]
+    23  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x6ddea) [0x7fe71e8e9dea]
+    24  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x64416) [0x7fe71e8e0416]
+    25  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x47a6) [0x7fe71e8e4f46]
+    26  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x6ddea) [0x7fe71e8e9dea]
+    27  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x64416) [0x7fe71e8e0416]
+    28  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x47a6) [0x7fe71e8e4f46]
+    29  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x6ddea) [0x7fe71e8e9dea]
+    30  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x64416) [0x7fe71e8e0416]
+    31  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x47a6) [0x7fe71e8e4f46]
+    32  ./transfer_synthetic(+0xcb76) [0x55c388319b76]
+    33  ./transfer_synthetic(+0xed7e) [0x55c38831bd7e]
+    34  ./transfer_synthetic(+0x1050a) [0x55c38831d50a]
+    35  ./transfer_synthetic(+0x16e49) [0x55c388323e49]
+    36  ./transfer_synthetic(+0x10188) [0x55c38831d188]
+    37  ./transfer_synthetic(+0xae26) [0x55c388317e26]
+    38  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(PyModule_ExecDef+0x4b) [0x7fe71ea2b3eb]
+    39  ./transfer_synthetic(+0xb709) [0x55c388318709]
+    40  ./transfer_synthetic(+0xbdaf) [0x55c388318daf]
+    41  /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf3) [0x7fe71e6ae083]
+    42  ./transfer_synthetic(+0xbe91) [0x55c388318e91]
+    =================================
+    Aborted (core dumped)
+
+### ucp._libs.exceptions.UCXError: Device is busy
+
+Current port is busy, terminate the process using it or use another port
+
+### UCX  WARN  transport 'ib' is not available
+
+The networking library could not use Infiniband. A fix is to recompile UCX with Infiniband support, see building UCX for more information. 
+
+If running `dmesg` and the output looks like this:
+
+    (data-transfer) two-face@twoface:~/data-transfer$ dmesg
+    ...
+    [18846.942527] port_module: 28 callbacks suppressed
+    [18846.942536] mlx5_core 0000:04:00.0: Port module event: module 0, Cable unplugged
+    [18846.944179] mlx5_core 0000:04:00.0: mlx5_pcie_event:293:(pid 4865): Detected insufficient power on the PCIe slot (26W).
+    [18846.944259] mlx5_core 0000:04:00.1: mlx5_pcie_event:293:(pid 4843): Detected insufficient power on the PCIe slot (26W).
+    [18846.989578] mlx5_core 0000:04:00.0 ens4f0np0: Link down
+    [18847.678446] mlx5_core 0000:04:00.1: Port module event: module 1, Cable unplugged
+    [18847.686809] mlx5_core 0000:04:00.1 ens4f1np1: Link down
+
+The physical connection is down, make sure both computers are able to ping eachother before running the demo.
+
 ### libpython3.7m.so.1.0 not found
 
 If during runtime, the linker cannot find `libpython3.7m.so.1.0` like this:
 
     error while loading shared libraries: libpython3.7m.so.1.0: cannot open shared object file: No such file or directory
 
-A temporal solution is to export the path to the module using
+A temporal solution is to export the path to the module using:
 
     export LD_LIBRARY_PATH=~/miniconda3/envs/data-transfer/lib/
 
