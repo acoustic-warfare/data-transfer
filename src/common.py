@@ -19,7 +19,7 @@ def receiver(n_bytes, port, queue, array_backend, ucp, dtype, running):
             while running:  # Bool
                 try:
                     await endpoint.recv(recv_data)  # Fill buffer with received data
-                    bandwidth = (n_bytes / (time.time() - last) / 2**20)  # For GB/s
+                    bandwidth = n_bytes / (time.time() - last)
                     queue.put((recv_data, bandwidth))  # Put data to a callback queue
                     last = time.time()
                 except:

@@ -1,5 +1,5 @@
 # cython: language_level=3
-# File: data-transfer/src/transfer_real.pyx
+# File: data-transfer/src/transfer_synthetic.pyx
 # Author: Irreq
 # Date: 26/07-2022
 
@@ -7,7 +7,6 @@ import time
 import queue
 import socket
 import signal
-import ctypes
 import asyncio
 import argparse
 import threading
@@ -17,89 +16,12 @@ import ucp
 from src.common import receiver
 
 """
-                A Real Data Transfer Demo
+                A Synthetic Data Transfer Demo
 
-Usage:
-    1. Run instance of receiver mode on PC B. (Default)
-    2. Run instance of transmitter mode on PC A.
-    3. Run data generator to PC A
-    4. Run `web_gauge` on PC B
-
-    See bandwidth in real-time on the running web server
-
-
-Documentation:
-
-            Data Flow - Transmission Mode (PC A)
-+-----------------------------------------------------------+
-|                                                           |
-| 1. FPGA (Emulated) or device writing to socket on PC A    |
-|                                                           |
-| 2. PC A (Two threads)                                     |
-|     First establish a connection, then:                   |
-|     * (Loop 1) Socket parser                              |
-|                 |                                         |
-|                 +-> Fill buffer from socket in the size   |
-|                 |   of `Protocol`                         |
-|                 |                                         |
-|                 +-> Put received data into FIFO queue     |
-|                                                           |
-|     * (Loop 2) RDMA Transmitter                           |
-|                 |                                         |
-|                 +-> Poll queue and load buffer onto GPU   |    
-|                 |   (CuPy Array)                          |
-|                 |                                         |
-|                 +-> Write to Remote memory region         |
-|                 |                                         |
-|                 +-> Await write completion                |
-|                                                           |
-+-----------------------------------------------------------+
-
-
-          Data Flow - Receiving Mode (PC B)
-+-----------------------------------------------------------+
-|                                                           |
-| 1. PC B (Two threads)                                     |
-|     First establish connection, then:                     |
-|     * (Loop 1) RDMA Receiver (Python function, see: TODO) |
-|                 |                                         |
-|                 +-> Create empty buffer (CuPy Array) of   |
-|                 |   `n_bytes` size                        |
-|                 |                                         |
-|                 +-> Fill buffer of received RDMA transfer |
-|                 |                                         |
-|                 +-> Put Buffer into a queue               |
-|                                                           |
-|     * (Loop 2) Receive handler                            |
-|                 |                                         |
-|                 +-> Poll queue and callback with received |
-|                 |   buffer (Received RDMA)                |
-|                 |                                         |
-|                 +-> (Default Callback) Broadcast received |
-|                     buffers's bandwidth to Running        |
-|                     `web_gauge` server. See:              |
-|                     src/web_live_gauge.pyx                |
-|                                                           |
-| 2. Running `web_gauge` server listening on                |
-|    `--web-port` on PC B                                   |
-|                                                           |
-+-----------------------------------------------------------+
 """
 
 cdef int timeout = 60
 cdef str ENCODING = "utf8"
-
-# Struct from receiving protocol
-class Payload(ctypes.Structure):
-    """Payload C-like structure"""
-
-    _fields_ = [("id", ctypes.c_int),                # Transfer id, for tracking later
-                ("protocol_version", ctypes.c_int),  # Debugging
-                ("fs", ctypes.c_int),                # Sampling Rate (Hz)
-                ("fs_nr", ctypes.c_int),             # Sample number
-                ("samples", ctypes.c_int),           # Status from mic
-                ("sample_error", ctypes.c_int),      # If error, and location of error
-                ("bitstream", (ctypes.c_int*192))]   # The bitstream from the mic array
 
 def setup(args):
     if args.mode == "gpu":
@@ -259,42 +181,16 @@ cdef class DataTransfer:
         second_thread.join()
 
     def transmitter(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # [Errno 98] Address already in use, https://stackoverflow.com/questions/4465959/python-errno-98-address-already-in-use
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        sock.bind(("localhost", self._socket_port))
-        if self.debug:
-            print("Waiting for a connection")
-        sock.listen(1)
-
-        csock, _ = sock.accept()
-
         async def run():
             endpoint = await ucp.create_endpoint(self._address, self._port)
-            
+            # Allocate _n_bytes ones
+            bitstream = self.backend.ones(self._n_bytes, dtype=self.dtype)
             while self.running:
-                buffer = csock.recv(792)
-                if buffer:
-                    try:
-                        payload_data = Payload.from_buffer_copy(
-                            buffer)
-                        bitstream = list(payload_data.bitstream)
-                        # Load the array to the gpu
-                        cp_arr = self.backend.array(bitstream, dtype=self.dtype)
-                        
-                        await endpoint.send(cp_arr)
-
-                    except ValueError:
-                        self.faults += 1
-                        if self.debug:
-                            print("Warning missing data")
-                    
-                    self.iter += 1
-                    
-            
-            sock.close()
-            print(f"Dropped Errors: {round(self.faults/self.iter, 2)}%")
+                try:
+                    # Send bitstream
+                    await endpoint.send(bitstream)
+                except:
+                    break
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(run())
@@ -307,13 +203,13 @@ cdef class DataTransfer:
             print(arr.nbytes)
 
         # Broadcast bandwidth to web gauge demo
-        self.web_output.broadcast(bw/2**20)
+        self.web_output.broadcast(bw/2**30)
 
 
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="COTS Data Transfer (REAL)")
+    parser = argparse.ArgumentParser(description="COTS Data Transfer (SYNTHETIC)")
     parser.add_argument(
         "--transmitter",
         default=False,
@@ -334,9 +230,9 @@ def parse_args():
     )
     parser.add_argument(
         "--n-bytes",
-        default=192,
+        default=2**26,
         type=int,
-        help="Message size in bytes from FPGA",
+        help="Message size in bytes",
     )
     parser.add_argument(
         "--msg-size",

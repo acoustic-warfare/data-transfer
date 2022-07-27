@@ -22,8 +22,7 @@ LIB = lib
 
 .PHONY: all
 
-all: main fpga web_gauge
-# all: main
+all: main fpga web_gauge transfer_real transfer_synthetic
 
 main: lib
 	$(CYC) $(CYFLAGS) -o $(OUT)/main.c src/main.pyx
@@ -31,10 +30,13 @@ main: lib
 fpga:
 	$(CC) $(CFLAGS) -o fpga_emulator src/fpga_mic_em.c
 
-test:
-	$(CYC) $(CYFLAGS) -o $(OUT)/test.c src/transfer_real.pyx
-	$(CC) $(CFLAGS) -I $(PYMODULE) -o test $(OUT)/test.c -L $(PYLIB) $(LIBS)
+transfer_real:
+	$(CYC) $(CYFLAGS) -o $(OUT)/transfer_real.c src/transfer_real.pyx
+	$(CC) $(CFLAGS) -I $(PYMODULE) -o transfer_real $(OUT)/transfer_real.c -L $(PYLIB) $(LIBS)
 
+transfer_synthetic:
+	$(CYC) $(CYFLAGS) -o $(OUT)/transfer_synthetic.c src/transfer_synthetic.pyx
+	$(CC) $(CFLAGS) -I $(PYMODULE) -o transfer_synthetic $(OUT)/transfer_synthetic.c -L $(PYLIB) $(LIBS)
 
 web_gauge:
 	$(CYC) $(CYFLAGS) -o $(OUT)/web_live_gauge.c src/web_live_gauge.pyx
@@ -57,5 +59,5 @@ lib: cubridge.so
 
 .PHONY: clean
 clean:
-	$(RM) $(LIB)/*.so $(OUT)/*.o $(OUT)/main.c $(BIN) fpga_emulator web_gauge
+	$(RM) $(LIB)/*.so $(OUT)/*.o $(OUT)/main.c $(BIN) fpga_emulator web_gauge transfer_real transfer_synthetic
 
