@@ -2,7 +2,7 @@
 
 A COTS GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's over UCX.
 
-![Transfer Demo](https://github.com/acoustic-warfare/data-transfer/synthetic_transfer.gif)
+![Transfer Demo](https://github.com/acoustic-warfare/data-transfer/synthetic_transfer_demo.gif)
 
 ## Installation
 
