@@ -7,16 +7,87 @@ import time
 import queue
 import socket
 import signal
+import ctypes
 import asyncio
 import argparse
 import threading
 
 import ucp
-import ctypes
 
 from src.common import receiver
 
+"""
+                A Real Data Transfer Demo
+
+Usage:
+    1. Run instance of receiver mode on PC B. (Default)
+    2. Run instance of transmitter mode on PC A.
+    3. Run data generator to PC A
+    4. Run `web_gauge` on PC B
+
+    See bandwidth in real-time on the running web server
+
+
+Documentation:
+
+            Data Flow - Transmission Mode (PC A)
++-----------------------------------------------------------+
+|                                                           |
+| 1. FPGA (Emulated) or device writing to socket on PC A    |
+|                                                           |
+| 2. PC A (Two threads)                                     |
+|     First establish a connection, then:                   |
+|     * (Loop 1) Socket parser                              |
+|                 |                                         |
+|                 +-> Fill buffer from socket in the size   |
+|                 |   of `Protocol`                         |
+|                 |                                         |
+|                 +-> Put received data into FIFO queue     |
+|                                                           |
+|     * (Loop 2) RDMA Transmitter                           |
+|                 |                                         |
+|                 +-> Poll queue and load buffer onto GPU   |    
+|                 |   (CuPy Array)                          |
+|                 |                                         |
+|                 +-> Write to Remote memory region         |
+|                 |                                         |
+|                 +-> Await write completion                |
+|                                                           |
++-----------------------------------------------------------+
+
+
+          Data Flow - Receiving Mode (PC B)
++-----------------------------------------------------------+
+|                                                           |
+| 1. PC B (Two threads)                                     |
+|     First establish connection, then:                     |
+|     * (Loop 1) RDMA Receiver (Python function, see: TODO) |
+|                 |                                         |
+|                 +-> Create empty buffer (CuPy Array) of   |
+|                 |   `n_bytes` size                        |
+|                 |                                         |
+|                 +-> Fill buffer of received RDMA transfer |
+|                 |                                         |
+|                 +-> Put Buffer into a queue               |
+|                                                           |
+|     * (Loop 2) Receive handler                            |
+|                 |                                         |
+|                 +-> Poll queue and callback with received |
+|                 |   buffer (Received RDMA)                |
+|                 |                                         |
+|                 +-> (Default Callback) Broadcast received |
+|                     buffers's bandwidth to Running        |
+|                     `web_gauge` server. See:              |
+|                     src/web_live_gauge.pyx                |
+|                                                           |
+| 2. Running `web_gauge` server listening on                |
+|    `--web-port` on PC B                                   |
+|                                                           |
++-----------------------------------------------------------+
+"""
+
 cdef int timeout = 60
+cdef str ENCODING = "utf8"
 
 # Struct from receiving protocol
 class Payload(ctypes.Structure):
@@ -81,6 +152,28 @@ def queue_rows(q, block=False, timeout=None):
             yield row
 
 
+cdef class WebGaugeTransmitter:
+
+    cdef public str address
+    cdef public int port
+    cdef public object sock
+
+    def __init__(self, str address, int port):
+        self.address = address
+        self.port = port
+
+        # Setup socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # [Errno 98] Address already in use, https://stackoverflow.com/questions/4465959/python-errno-98-address-already-in-use
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        self.sock.connect((self.address, self.port))
+
+    def broadcast(self, bandwidth):
+        encoded = str(bandwidth).encode(ENCODING)
+        self.sock.sendto(encoded, (self.address, self.port))
+
+
 cdef class DataTransfer:
 
     """Main data transfer class."""
@@ -97,9 +190,13 @@ cdef class DataTransfer:
     cdef public _receive_q  # Internal queue
     cdef public backend  # Array backend, CuPy or Numpy
     cdef public bint debug  # Debug mode
+    cdef public object web_output
     cdef public str dtype
+    
+    cdef public unsigned long int iter
+    cdef public unsigned long int faults
 
-    def __init__(self, object args, unsigned long int n_bytes, str address=ucp.get_address(), int port=12345, unsigned long int msg_size=1000, bint debug=True):
+    def __init__(self, object args, unsigned long int n_bytes, str address=ucp.get_address(), int port=12345, unsigned long int msg_size=1000):
         self.args = args
         
         self._n_bytes = args.n_bytes
@@ -108,7 +205,10 @@ cdef class DataTransfer:
         self._socket_port = args.socket_port
         self._msg_size = msg_size
 
-        self.debug = debug
+        self.debug = args.debug
+
+        if not args.transmitter:  # For receiver
+            self.web_output = WebGaugeTransmitter(args.web_output, args.socket_port)
 
         self._receive_q = queue.Queue()
 
@@ -117,6 +217,8 @@ cdef class DataTransfer:
         self.dtype = "u1"
 
         self.running = True
+        self.iter = 0
+        self.faults = 0
         
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
@@ -129,8 +231,8 @@ cdef class DataTransfer:
         """Threaded handler"""
         last = time.time()
         while time.time()-last < timeout and self.running:
-            for buffer in queue_rows(self._receive_q):
-                self.callback(buffer)
+            for (buffer, bandwidth) in queue_rows(self._receive_q):
+                self.callback(buffer, bandwidth)
                 last = time.time()
             time.sleep(0.01)
 
@@ -144,6 +246,8 @@ cdef class DataTransfer:
         """
         second_thread = threading.Thread(target=self._receive_handler)
         second_thread.start()
+
+        # The real python function
         receiver(self._n_bytes,
                  self._port,
                  self._receive_q,
@@ -171,7 +275,6 @@ cdef class DataTransfer:
             
             while self.running:
                 buffer = csock.recv(792)
-                print("receiving")
                 if buffer:
                     try:
                         payload_data = Payload.from_buffer_copy(
@@ -183,20 +286,28 @@ cdef class DataTransfer:
                         await endpoint.send(cp_arr)
 
                     except ValueError:
+                        self.faults += 1
                         if self.debug:
                             print("Warning missing data")
+                    
+                    self.iter += 1
+                    
             
             sock.close()
+            print(f"Dropped Errors: {round(self.faults/self.iter, 2)}%")
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(run())
 
         
 
-    def callback(self, arr):
+    def callback(self, arr, bw):
         """Override this function"""
         if self.debug:
             print(arr.nbytes)
+
+        # Broadcast bandwidth to web gauge demo
+        self.web_output.broadcast(bw)
 
 
 
@@ -204,7 +315,7 @@ cdef class DataTransfer:
 def parse_args():
     parser = argparse.ArgumentParser(description="COTS Data Transfer (REAL)")
     parser.add_argument(
-        "--client",
+        "--transmitter",
         default=False,
         action="store_true",
         help="IP address to connect to server.",
@@ -213,7 +324,13 @@ def parse_args():
         "--debug",
         default=False,
         action="store_true",
-        help="IP address to connect to server.",
+        help="Debug mode.",
+    )
+    parser.add_argument(
+        "--web-output",
+        default=None,
+        type=str,
+        help="Output transfer-rate to web server.",
     )
     parser.add_argument(
         "--n-bytes",
@@ -270,7 +387,7 @@ if __name__ == "__main__":
     args = parse_args()
     dt = DataTransfer(args, args.n_bytes)
 
-    if args.client:
+    if args.transmitter:
         dt.transmitter()
     else:
         dt.receiver()
