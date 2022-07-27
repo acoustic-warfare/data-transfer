@@ -334,7 +334,7 @@ def parse_args():
     )
     parser.add_argument(
         "--n-bytes",
-        default=192,
+        default=192,  # Size of data-stream coming from the real FPGA board
         type=int,
         help="Message size in bytes from FPGA",
     )
@@ -358,7 +358,7 @@ def parse_args():
     )
     parser.add_argument(
         "-sp", "--socket-port",
-        default=23100,
+        default=45550,
         type=int,
         help="IP port to connect to server.",
     )
