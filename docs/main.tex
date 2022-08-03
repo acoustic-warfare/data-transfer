@@ -1,0 +1,452 @@
+\documentclass[a4paper,onecolumn]{article}
+
+\usepackage{graphicx}          % För att få grafik att fungera.
+\usepackage{amsmath}           % Innehåller vissa matematiska
+                               % symboler.
+\usepackage[utf8]{inputenc}  % Ser till så att svenska tecken
+                               % fungerar. Om du sparar filen i UTF-8,
+                               % byt latin1 mot utf8.
+\usepackage[english]{babel}    % LaTeX tänker svenskt.
+\usepackage{url}	       % För att ange URL:er
+
+\addtolength{\topmargin}{10mm}% Drar bort 20mm från övre marginalen
+                               % kommentera bort raden om du är nöjd
+                               % med avståndet. Det finns fler
+                               % parametrar att justera om du inte får
+                               % plats på det utsatta antalet sidor.
+\addtolength{\textheight}{10mm}% Det vi drog bort från topmargin
+                               % lägger vi till i texthöjden.
+                               
+\usepackage{cite}
+\usepackage{tabularx}
+\usepackage{siunitx}
+\usepackage[a4paper, total={6in, 8in}]{geometry}
+
+\usepackage{bigfoot} % to allow verbatim in footnote
+\usepackage[numbered,framed]{matlab-prettifier}
+\usepackage{filecontents}
+
+
+\usepackage[parfill]{parskip} % No newline indentation
+
+\usepackage{url}
+\usepackage{float}
+\usepackage{subfig}
+\usepackage{bm}
+\usepackage{tikz}
+\usepackage{physics}
+\usepackage{courier}
+\usepackage[font=small,labelfont = small]{caption}
+\geometry{left=20mm,right=20mm,top=20mm, bottom=20mm}
+
+\usepackage{pythonhighlight}
+
+\usepackage{listings}
+\usepackage{color}
+
+\usepackage{fancyvrb}
+\usepackage{fancyvrb}
+\usepackage{fvextra}
+\usepackage{xcolor}
+
+% Code Color Scheme
+\definecolor{code_black}{HTML}{282C34}
+\definecolor{code_red}{HTML}{FF0000}
+\definecolor{code_green}{HTML}{008000}
+\definecolor{code_yellow}{HTML}{FFD800}
+\definecolor{code_blue}{HTML}{1560BD}
+\definecolor{code_magenta}{HTML}{FF33CC}
+\definecolor{code_cyan}{HTML}{00BFFF}
+\definecolor{code_white}{HTML}{A9A9A9}
+
+
+\begin{document}
+
+
+
+\title{COTS RDMA Data-Transfer Over UCX}
+
+
+\author{Isac Bruce}
+
+\date{\today}
+
+
+\maketitle
+
+
+
+\section{Introduction}
+A proposed method for writing and reading to a remote memory region is tested with real and synthetic data to measure speed of transfer. The program utilizes the high performance networking library UCX to establish a communication layer between the endpoints. Furthermore, our demo was tested on two Intel Xeon Workstations (Back-to-Back) running Ubuntu 20.04 LTS  using Mellanox ConnectX-6 Dx and Nvidia Quadro M4000 GPU's.
+
+\section{Setup}
+In order to run the tests in the demo the following hardware and software requirements must be met:
+\subsection{Hardware Requirements}
+The following HCA's are high-performance 4X+ InfiniBand Host Channel Adapter
+(HCA) cards that enable performance of high-speed (20+ Gbps) InfiniBand fabrics, with latency as low as 1.3 microseconds. 
+\begin{itemize}
+   \item ConnectX-6 Lx
+   \item ConnectX-6 Dx  \textit{(Ours)}
+   \item ConnectX-6
+   \item ConnectX-5
+   \item ConnectX-4 Lx
+ \end{itemize}
+
+
+Appropriate GPU's for RDMA data-transfer must be accessible by the host and the HCA. The following Nvidia GPU's have been confirmed by either Nvidia or peers TODO to support GPUDirect RDMA. TODO
+AMD devices have not been tested or confirmed working using this method.
+
+\begin{itemize}
+   \item Tesla™ \textit{(any)}
+   \item Quadro™ K-Series
+   \item Quadro™ P-Series
+   \item Quadro™ M-Series \textit{(Ours)}
+ \end{itemize}
+
+\subsection{Software Requirements}
+In order to use the network interface cards, the package NVIDIA Firmware Tools: \verb|mft| must be installed for firmware management together with correct drivers for Linux \verb|MLNX_OFED|. 
+
+In order to utilize GPUDirect RDMA, the package \verb|nvidia-peer-mem| must be installed.
+
+To be able to control the host channel adapter (HCA), the HPC networking library \verb|ucx| is required with support for GPUDirect RDMA TODO.
+
+\section{Installation}
+
+\subsection{NVIDIA Drivers}
+It is preffered to install display drivers using the distribution's native package management tool, i.e \verb|apt|. If not installed already, NVIDIA display drivers can be installed from NVIDIA Download Center, see: \urlhttps://www.nvidia.com/Download/index.aspx?lang=en-us.
+
+\subsection{CUDA Runtime and Toolkit}
+To install CUDA Toolkit (CUDA 11.7) from Nvidia on Ubuntu 20.04:
+
+\begin{Verbatim}[commandchars=\\\{\}]
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda-repo-ubuntu2004-11-7-local_11.7.0-515.43.04-1_amd64.deb
+
+sudo dpkg -i cuda-repo-ubuntu2004-11-7-local_11.7.0-515.43.04-1_amd64.deb
+sudo cp /var/cuda-repo-ubuntu2004-11-7-local/cuda-*-keyring.gpg /usr/share/keyrings/
+
+sudo apt-get update
+sudo apt-get -y install cuda
+\end{Verbatim}
+
+\subsection{Mellanox OFED}
+Compatible versions for NIC firmware are v2.1-x.x.x or later. To install Linux drivers for ethernet and infiniband adapters, \verb|MLNX_OFED|. See: Download Center https://network.nvidia.com/products/infiniband-drivers/linux/mlnx_ofed/ or for Ubuntu 20.04:
+
+\begin{Verbatim}[breaklines=true, breakanywhere=true, breaksymbol=, breakanywheresymbolpre=]
+wget http://www.mellanox.com/downloads/ofed/MLNX_OFED-5.6-2.0.9.0/MLNX_OFED_LINUX-5.6-2.0.9.0-ubuntu20.04-x86_64.tgz
+tar -xvf MLNX_OFED_LINUX*
+
+cd MLNX_OFED_LINUX*
+sudo ./mlnxofedinstall --upstream-libs --dpdk --force
+
+sudo /etc/init.d/openibd restart
+\end{Verbatim}
+
+\subsection{GPUDirect RDMA}
+
+To enable GPUDirect RDMA the Nvidia kernel module \verb|nvidia-peer-mem| must be installed. The module will be referred to as \verb|nvidia-peer-mem| and \verb|nv_peer_mem| interchangeably. To install \verb|nv_peer_mem| for Ubuntu 20.04 LTS:
+
+\begin{Verbatim}[breaklines=true, breakanywhere=true, breaksymbol=, breakanywheresymbolpre=]
+git clone https://github.com/Mellanox/nv_peer_memory.git
+cd nv_peer_memory
+./build_module.sh
+
+cd /tmp
+tar xzf /tmp/nvidia-peer-memory_*
+cd nvidia-peer-memory-*
+dpkg-buildpackage -us -uc
+sudo dpkg -i /tmp/nvidia-peer-memory_*.deb
+
+sudo service nv_peer_mem restart
+\end{Verbatim}
+
+
+\subsection{UCX}
+
+To install \verb|ucx| on Ubuntu 20.04, python bindings are required together with python3+ packages. To maintain a working environment, installing \verb|conda| is highly recommended. 
+
+\subsubsection{Conda}
+
+\begin{enumerate}
+    \item Installing on system:
+\begin{Verbatim}[breaklines=true, breakanywhere=true, breaksymbol=, breakanywheresymbolpre=]
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86.sh
+
+bash Miniconda3-latest-Linux-x86.sh
+\end{Verbatim}
+
+    \item Disable auto-init \textit{(optional)}
+
+\begin{verbatim}
+conda config --set auto_activate_base false
+\end{verbatim}
+
+    \item Recreate an environment inside \verb|data-transfer|
+
+\begin{verbatim}
+conda env create -f environment.yml
+\end{verbatim}
+
+    \item Activate and enter the newly created environment
+    
+\begin{verbatim}
+conda activate data-transfer
+\end{verbatim}
+
+\end{enumerate}
+
+The terminal should now look like this:
+\begin{Verbatim}[commandchars=\\\{\}]
+\textcolor{code_green}{user@host}:\textcolor{code_blue}{~/data-transfer}$ conda activate data-transfer
+(data-transfer) \textcolor{code_green}{user@host}:\textcolor{code_blue}{~/data-transfer}$
+\end{Verbatim}
+
+\subsubsection{Dependencies}
+
+To build the project requires having some other modules not included in the conda environment:
+
+\begin{verbatim}
+pip install pynvml cpython
+\end{verbatim}
+
+\subsubsection{Development packages}
+
+Ensure that the latest updates are installed by issuing the command \verb|sudo apt update -y|. Install the development packages \verb|libnuma-dev, cython3|. Using \verb|apt|:
+
+\begin{verbatim}
+sudo apt install -y libnuma-dev cython3
+\end{verbatim}
+
+
+\section{Configuration}
+
+\subsection{Networking}
+The adapters need assigned IP addresses, we used the \verb|GNOME Network Manager| GUI and assigned the IPv4 addresses 10.0.0.x format with netmask 255.255.255.0
+
+To run the demo, make sure both network adapters are connected and working properly by performing a ping. It is important to specify the correct interface when pinging:
+
+\begin{verbatim}
+ping -I <LOCAL_INTERFACE> <REMOTE_ADDRESS>
+\end{verbatim}
+
+Eg.:
+\begin{Verbatim}[commandchars=\\\{\}]
+(data-transfer) \textcolor{code_green}{user@scarecrow}:\textcolor{code_blue}{~/data-transfer}$ ping -I ens4f0np0 10.0.0.4
+PING 10.0.0.4 (10.0.0.4) from 10.0.0.3 ens4f0np0: 56(84) bytes of data.
+64 bytes from 10.0.0.4: icmp_seq=1 ttl=64 time=0.110 ms
+64 bytes from 10.0.0.4: icmp_seq=2 ttl=64 time=0.112 ms
+64 bytes from 10.0.0.4: icmp_seq=3 ttl=64 time=0.109 ms
+^C
+--- 10.0.0.4 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2029ms
+rtt min/avg/max/mdev = 0.109/0.110/0.112/0.001 ms
+\end{Verbatim}
+
+\pagebreak
+To find which interface to ping, one could use \verb|ifconfig|:
+
+\begin{Verbatim}[commandchars=\\\{\}]
+(data-transfer) \textcolor{code_green}{user@scarecrow}:\textcolor{code_blue}{~/data-transfer}$ ifconfig
+
+    eno1: flags=4099<UP,BROADCAST,MULTICAST>  mtu 1500
+        ether 54:bf:64:6a:91:31  txqueuelen 1000  (Ethernet)
+        RX packets 0  bytes 0 (0.0 B)
+        RX errors 0  dropped 0  overruns 0  frame 0
+        TX packets 0  bytes 0 (0.0 B)
+        TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+        device interrupt 16  memory 0x92f00000-92f20000  
+
+    # The one we used: Mellanox ConnectX-6 Dx (first port)
+    -----------------
+ -> \textcolor{code_red}{ens4f0np0}: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet \textcolor{code_red}{10.0.0.3}  netmask 255.255.255.0  broadcast 10.0.0.255
+            inet6 fe80::4e4d:abee:c38d:4b6f  prefixlen 64  scopeid 0x20<link>
+            ether 10:70:fd:60:c1:cc  txqueuelen 1000  (Ethernet)
+            RX packets 1021  bytes 63776 (63.7 KB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 841  bytes 52495 (52.4 KB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+    -----------------
+
+    ens4f1np1: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet 10.0.0.1  netmask 255.255.255.0  broadcast 10.0.0.255
+            inet6 fe80::40ba:65b6:cb4e:4521  prefixlen 64  scopeid 0x20<link>
+            ether 10:70:fd:60:c1:cd  txqueuelen 1000  (Ethernet)
+            RX packets 36  bytes 4419 (4.4 KB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 23  bytes 3072 (3.0 KB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+    lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+            inet 127.0.0.1  netmask 255.0.0.0
+            inet6 ::1  prefixlen 128  scopeid 0x10<host>
+            loop  txqueuelen 1000  (Local Loopback)
+            RX packets 1782  bytes 168796 (168.7 KB)
+            RX errors 0  dropped 0  overruns 0  frame 0
+            TX packets 1782  bytes 168796 (168.7 KB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+
+    wlx04421a4d9e71: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+            inet 81.236.101.159  netmask 255.255.254.0  broadcast 81.236.101.255
+            inet6 fe80::7207:baa6:6cea:6bd3  prefixlen 64  scopeid 0x20<link>
+            ether 04:42:1a:4d:9e:71  txqueuelen 1000  (Ethernet)
+            RX packets 66840  bytes 48821412 (48.8 MB)
+            RX errors 0  dropped 7  overruns 0  frame 0
+            TX packets 61150  bytes 44974817 (44.9 MB)
+            TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+\end{Verbatim}
+
+If the connection is working, building can be started.
+\pagebreak
+
+\section{Building}
+Building the program will create 5 executable files: \verb|run, web_gauge, fpga_emulator, transfer_real| and \verb|transfer_synthetic|
+
+\vspace{5mm} %5mm vertical space
+To build all programs issue the \verb|make| command
+
+\subsection{run}
+\verb|run| is an experimental program utilizing CUDA code over a Cython-C-Cuda bridge known as \verb|cubridge.so| which is being built when building the demo. This can be used to call CUDA functions directly from Python code during runtime.
+
+\subsection{fpga\_emulator}
+\verb|fpga_emulator| is a program to emulate an incoming datastream (data generator) to send from one GPU to the other combined with \verb|transfer_real|.
+
+\subsection{transfer\_real}
+\verb|transfer_real| is a demo utilizing incoming data from a socket, eg. a real device or \verb|fpga_emulator| and displays the bandwidth to \verb|web_gauge|.
+
+\subsection{transfer\_synthetic}
+\verb|transfer_synthetic| showcases the maximum internal transfer-speed between two nodes, ie. the program creates an array of ones, default is $\bm{2}^{26}$ bytes and writes to a remote region as fast as possible. The program \verb|web_gauge| is also used to display the results.
+
+
+\section{Usage}
+Running the demo requires that both computers are connected via \verb|infiniband| and correct software and modules are installed and running.
+
+
+
+\section{Problems and Known Issues}
+
+\subsection{Network Cards Shutting Down}
+
+If the network adapters stops working after a period of time can be a result of insufficient cooling. The ConnectX cards require continuous cooling, we found that after exceeding 110°C, the modules were being unloaded from the system \verb|mlx5_core| followed by many warnings when shown with \verb|dmesg|. After exceeding the 120°C mark, the cards were physically shutdown by an onboard safety mechanism resulting in reloading the kernel modules was impossible and required a complete restart of the system. This happened without any load on the cards, around 2 minutes after a cold boot.
+
+According to Nvidia \cite{article_nvidia_thermal_sensors}:
+
+"The adapter card incorporates the ConnectX IC which operates in the range of temperatures between 0C and 105C.
+
+There are three thermal threshold definitions which impact the overall system operation state:
+\begin{itemize}
+\item \textbf{Warning} – 105°C: On managed systems only: When the device crosses the 100°C threshold, a Warning Threshold message will be issued by the management SW, indicating to system administration that the card has crossed the Warning threshold. Note that this temperature threshold does not require nor lead to any action by hardware (such as adapter card shutdown).
+ 
+\item \textbf{Critical} – 115°C: When the device crosses this temperature, the firmware will automatically shut down the device.
+
+\item \textbf{Emergency} – 130°C: In case the firmware fails to shut down the device upon crossing the Critical threshold, the device will auto-shutdown upon crossing the Emergency (130°C) threshold.
+\end{itemize}
+
+The card's thermal sensors can be read through the system’s SMBus. The user can read these thermal sensors and adapt the system airflow in accordance with the readouts and the needs of the above-mentioned IC thermal requirements."
+
+To check the current temperature of the installed cards, the command \verb|mget_temp| included in \verb|mft| can be used.
+
+\vspace{5mm} %5mm vertical space
+To find which card (location) to probe on the PCIe bus:
+
+\begin{Verbatim}[commandchars=\\\{\}]
+(data-transfer) \textcolor{code_green}{user@scarecrow}:\textcolor{code_blue}{~/data-transfer}$ lspci | grep Mellanox
+\textcolor{code_magenta}{04:00.0} Ethernet controller: \textcolor{code_red}{Mellanox} Technologies MT2892 Family [ConnectX-6 Dx]
+04:00.1 Ethernet controller: \textcolor{code_red}{Mellanox} Technologies MT2892 Family [ConnectX-6 Dx]
+\end{Verbatim}
+
+\vspace{5mm} %5mm vertical space
+To probe \verb|04:00.0| (requires root privileges):
+
+\begin{Verbatim}[commandchars=\\\{\}]
+(data-transfer) \textcolor{code_green}{user@scarecrow}:\textcolor{code_blue}{~/data-transfer}$ sudo mget_temp -d 04:00.0
+53
+\end{Verbatim}
+
+
+\subsection{Runtime Errors and Solutions}
+
+\subsubsection{Aborted (core dumped) & UCX ERROR failed to register address/bad address}
+
+If during runtime the following error occurs a solution is to use smaller buffers. We are not entirely sure how this issue is emerging. We found that a buffer size greater than \textcolor{code_magenta}{$>115MB$} would result in the following errors:
+
+\begin{Verbatim}[commandchars=\\\{\}, breaklines=true, breakanywhere=true, breaksymbol=, breakanywheresymbolpre=]
+(data-transfer) \textcolor{code_green}{user@scarecrow}:\textcolor{code_blue}{~/data-transfer}$ ./transfer_synthetic --transmitter -p 12377 -sp 45004 -a 10.0.0.4  --n-bytes \textcolor{code_magenta}{1000000000}
+[1658921155.651848] [scarecrow:15571:0]          ib_log.c:254  \textcolor{code_red}{UCX  ERROR ibv_reg_mr(address=0x7fe574000000, length=1000000000, access=0xf) failed: Bad address}
+[1658921155.651869] [scarecrow:15571:0]          ucp_mm.c:159  \textcolor{code_red}{UCX  ERROR failed to register address 0x7fe574000000 mem_type bit 0x2 length 1000000000 on md[3]=mlx5_0: Input/output error (md reg_mem_types 0x3)}
+[1658921155.651874] [scarecrow:15571:0]     ucp_request.c:519  UCX  ERROR failed to register user buffer datatype 0x8 address 0x7fe574000000 len 1000000000: Input/output error
+[scarecrow:15571:0:15571]        rndv.c:2378 Assertion `status == UCS_OK' failed
+==== backtrace (tid:  15571) ====
+0  /home/scarecrow/miniconda3/envs/data-transfer/lib/python3.7/site-packages/ucp/_libs/../../../../libucs.so.0(ucs_handle_error+0x2dc) [0x7fe71a27d7cc]
+...
+30  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(+0x64416) [0x7fe71e8e0416]
+31  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(_PyEval_EvalFrameDefault+0x47a6) [0x7fe71e8e4f46]
+36  ./transfer_synthetic(+0x10188) [0x55c38831d188]
+37  ./transfer_synthetic(+0xae26) [0x55c388317e26]
+38  /home/scarecrow/miniconda3/envs/data-transfer/lib/libpython3.7m.so.1.0(PyModule_ExecDef+0x4b)[0x7fe71ea2b3eb]
+39  ./transfer_synthetic(+0xb709) [0x55c388318709]
+40  ./transfer_synthetic(+0xbdaf) [0x55c388318daf]
+41  /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf3) [0x7fe71e6ae083]
+42  ./transfer_synthetic(+0xbe91) [0x55c388318e91]
+=================================
+\textcolor{code_red}{Aborted (core dumped)}
+\end{Verbatim}
+
+\subsection{ucp.\_libs.exceptions.UCXError: Device is busy}
+
+Current port is busy, terminate the process using it or use another port
+
+\subsection{UCX  WARN  transport 'ib' is not available}
+
+The networking library could not use Infiniband. A fix is to recompile UCX with Infiniband support, see building UCX for more information. 
+
+If running \verb|dmesg| and the output looks like this:
+
+\begin{Verbatim}[commandchars=\\\{\}, breaklines=true, breakanywhere=true, breaksymbol=, breakanywheresymbolpre=]
+(data-transfer) \textcolor{code_green}{user@scarecrow}:\textcolor{code_blue}{~/data-transfer}$ dmesg
+[18846.942527] port_module: 28 callbacks suppressed
+[18846.942536] mlx5_core 0000:04:00.0: Port module event: module 0, Cable unplugged
+[18846.944179] mlx5_core 0000:04:00.0: mlx5_pcie_event:293:(pid 4865): Detected insufficient power on the PCIe slot (26W).
+[18846.944259] mlx5_core 0000:04:00.1: mlx5_pcie_event:293:(pid 4843): Detected insufficient power on the PCIe slot (26W).
+[18846.989578] mlx5_core 0000:04:00.0 ens4f0np0: Link down
+[18847.678446] mlx5_core 0000:04:00.1: Port module event: module 1, Cable unplugged
+[18847.686809] mlx5_core 0000:04:00.1 ens4f1np1: Link down
+\end{Verbatim}
+
+The physical connection is down, make sure both computers are able to ping eachother before running the demo.
+
+
+\subsection{libpython3.7m.so.1.0 not found}
+If during runtime, the linker cannot find \verb|libpython3.7m.so.1.0| like this:
+\begin{verbatim}
+error while loading shared libraries: libpython3.7m.so.1.0: 
+cannot open shared object file: No such file or directory
+\end{verbatim}
+
+A temporal solution is to export the path to the module using:
+\begin{verbatim}
+export LD_LIBRARY_PATH=~/miniconda3/envs/data-transfer/lib/
+\end{verbatim}
+
+
+\section{Generation of the data}
+\subsection{The geometry of the environment}
+In order to evaluate the performance of the beamforming algorithm, we must first generate an environment that has all the necessary components for the beamforming algorithm to work. This means that we must create an environment with an existing array antenna and sources for the array antenna to sense. Such an environment can be seen in Figure \ref{system_geometry}.
+
+\begin{python}
+# transfer_real.pyx
+
+import ucp
+
+async def transmitter():
+    while True:
+        await endpoint.send(cp_arr)
+\end{python}
+
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+
+\end{document}
