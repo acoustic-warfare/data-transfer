@@ -4,6 +4,11 @@ A COTS GPUDirect RDMA data transer demo between two nodes (Back-to-Back) using M
 
 ![Transfer Demo](https://github.com/acoustic-warfare/data-transfer/blob/main/synthetic_transfer_demo.gif)
 
+
+## Algorithm
+![Algorithm](https://github.com/acoustic-warfare/data-transfer/blob/main/docs/ucx-algorithm.png)
+
+
 ## Installation
 
 Clone the project:
