@@ -44,7 +44,7 @@ def setup(args):
 
     return array_backend
 
-
+# Setup of self-flushing queue, once an item has been read it gets removed
 class read_from_q:
     def __init__(self, q, block=False, timeout=None):
         """
@@ -62,7 +62,7 @@ class read_from_q:
     def __exit__(self, _type, _value, _traceback):
         self.q.task_done()
 
-
+# Part of self flushing queue
 def queue_rows(q, block=False, timeout=None):
     """
      :param Queue.Queue q:
@@ -73,7 +73,7 @@ def queue_rows(q, block=False, timeout=None):
         with read_from_q(q, block, timeout) as row:
             yield row
 
-
+# Transmit current BW to webserver over UDP
 cdef class WebGaugeTransmitter:
 
     cdef public str address
@@ -102,21 +102,22 @@ cdef class DataTransfer:
 
     # Define variables to be accessed by function outside DataTransfer class
     cdef unsigned long int _n_bytes  # Up to 1GB
-    cdef str _address  # host address
-    cdef int _port  # RDMA port
-    cdef int _socket_port  # Socket port
-    cdef unsigned long int _msg_size  # Up to 115MB
+    cdef str _address                # host address
+    cdef int _port                   # RDMA port
+    cdef int _socket_port            # Socket port
+    cdef unsigned long int _msg_size # Up to 115MB
 
-    cdef public args  # Commandline arguments
-    cdef public int running  # Signal interupt
+    cdef public args        # Commandline arguments
+    cdef public int running # Signal interupt
     cdef public _receive_q  # Internal queue
-    cdef public backend  # Array backend, CuPy or Numpy
+    cdef public backend     # Array backend, CuPy or Numpy
     cdef public bint debug  # Debug mode
-    cdef public object web_output
-    cdef public str dtype
     
-    cdef public unsigned long int iter
-    cdef public unsigned long int faults
+    cdef public object web_output # Placeholder for webserver class
+    cdef public str dtype         # Data type for array
+    
+    cdef public unsigned long int iter   # Number for transfers
+    cdef public unsigned long int faults # Number for unsuccessful transfers
 
     def __init__(self, object args, unsigned long int n_bytes, str address=ucp.get_address(), int port=12345, unsigned long int msg_size=1000):
         self.args = args
@@ -136,12 +137,13 @@ cdef class DataTransfer:
 
         self.backend = setup(self.args)
 
-        self.dtype = "u1"
+        self.dtype = "u1" # Unsigned 8-bit int
 
         self.running = True
         self.iter = 0
         self.faults = 0
         
+        # Graceful exit on <Ctrl-C>
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
@@ -192,6 +194,7 @@ cdef class DataTransfer:
                 except:
                     break
 
+        # Asynchronously run the transmitter
         loop = asyncio.get_event_loop()
         loop.run_until_complete(run())
 

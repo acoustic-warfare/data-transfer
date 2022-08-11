@@ -101,6 +101,7 @@ class Payload(ctypes.Structure):
                 ("sample_error", ctypes.c_int),      # If error, and location of error
                 ("bitstream", (ctypes.c_int*192))]   # The bitstream from the mic array
 
+# Setup for which backend to use (CPU or GPU)
 def setup(args):
     if args.mode == "gpu":
         import cupy as array_backend
@@ -112,6 +113,7 @@ def setup(args):
         if args.debug:
             print("Will use CPU backend (Numpy)")
 
+    # Initiate UCX with arguments
     ucp_setup_options = dict(TLS=args.methods)
 
     try:
@@ -122,7 +124,7 @@ def setup(args):
 
     return array_backend
 
-
+# FIFO Queue with one-time reading, meaning data is dumped when read
 class read_from_q:
     def __init__(self, q, block=False, timeout=None):
         """
@@ -140,7 +142,7 @@ class read_from_q:
     def __exit__(self, _type, _value, _traceback):
         self.q.task_done()
 
-
+# Generator function to poll the queue
 def queue_rows(q, block=False, timeout=None):
     """
      :param Queue.Queue q:
@@ -151,9 +153,10 @@ def queue_rows(q, block=False, timeout=None):
         with read_from_q(q, block, timeout) as row:
             yield row
 
-
+# Class for transmitting bandwidth to demo server
 cdef class WebGaugeTransmitter:
 
+    # Cython requires publicly defined variables in order to access them within the class.
     cdef public str address
     cdef public int port
     cdef public object sock
@@ -179,22 +182,22 @@ cdef class DataTransfer:
     """Main data transfer class."""
 
     # Define variables to be accessed by function outside DataTransfer class
-    cdef unsigned long int _n_bytes  # Up to 1GB
-    cdef str _address  # host address
-    cdef int _port  # RDMA port
-    cdef int _socket_port  # Socket port
+    cdef unsigned long int _n_bytes   # Up to 1GB
+    cdef str _address                 # Host address
+    cdef int _port                    # RDMA port
+    cdef int _socket_port             # Socket port
     cdef unsigned long int _msg_size  # Up to 115MB
 
-    cdef public args  # Commandline arguments
-    cdef public int running  # Signal interupt
-    cdef public _receive_q  # Internal queue
-    cdef public backend  # Array backend, CuPy or Numpy
-    cdef public bint debug  # Debug mode
-    cdef public object web_output
-    cdef public str dtype
+    cdef public args              # Commandline arguments
+    cdef public int running       # Signal interupt
+    cdef public _receive_q        # Internal queue
+    cdef public backend           # Array backend, CuPy or Numpy
+    cdef public bint debug        # Debug mode
+    cdef public object web_output # Bandwidth
+    cdef public str dtype         # Data type
     
-    cdef public unsigned long int iter
-    cdef public unsigned long int faults
+    cdef public unsigned long int iter   # Number of transfers completed
+    cdef public unsigned long int faults # Number of failed transfers
 
     def __init__(self, object args, unsigned long int n_bytes, str address=ucp.get_address(), int port=12345, unsigned long int msg_size=1000):
         self.args = args
@@ -214,12 +217,13 @@ cdef class DataTransfer:
 
         self.backend = setup(self.args)
 
-        self.dtype = "u1"
+        self.dtype = "u1"  # 8-bit unsigned int
 
         self.running = True
         self.iter = 0
         self.faults = 0
         
+        # Setup event-listeners to capture <Ctrl-C> and disconnect the connection gracefully
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
@@ -274,15 +278,18 @@ cdef class DataTransfer:
             endpoint = await ucp.create_endpoint(self._address, self._port)
             
             while self.running:
+                # Receive size of Protocol
                 buffer = csock.recv(792)
                 if buffer:
                     try:
+                        # Convert Ctypes Payload to Cython object. Same as converting C to Cython.
                         payload_data = Payload.from_buffer_copy(
                             buffer)
                         bitstream = list(payload_data.bitstream)
                         # Load the array to the gpu
                         cp_arr = self.backend.array(bitstream, dtype=self.dtype)
                         
+                        # Write to remote buffer with array
                         await endpoint.send(cp_arr)
 
                     except ValueError:
@@ -292,10 +299,11 @@ cdef class DataTransfer:
                     
                     self.iter += 1
                     
-            
+            # Gracefully close socket when program is finished
             sock.close()
             print(f"Dropped Errors: {round(self.faults/self.iter, 2)}%")
 
+        # Asynchronously run the main thread
         loop = asyncio.get_event_loop()
         loop.run_until_complete(run())
 

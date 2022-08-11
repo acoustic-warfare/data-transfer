@@ -11,6 +11,7 @@ import argparse
 import threading
 import subprocess
 
+# Libraries to output to a web server
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output
@@ -42,6 +43,7 @@ previous = value
 
 host_address = "localhost"
 
+# Try to use another host address than localhost
 try:
     host_address = subprocess.check_output(['hostname', '-s', '-I']).decode('utf-8')[:-1]
     host_address = host_address.split()[0]
